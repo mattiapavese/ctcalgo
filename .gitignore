@@ -1,0 +1,4 @@
+assets/input_*
+**/venv
+**/*.py
+**/__pycache__
