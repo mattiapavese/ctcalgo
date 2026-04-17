@@ -1,4 +1,4 @@
-module forced-align
+module ctcalgo
 
 go 1.24.0
 
