@@ -1,4 +1,4 @@
-module ctcalgo
+module github.com/mattiapavese/ctcalgo
 
 go 1.24.0
 
