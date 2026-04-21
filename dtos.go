@@ -1,14 +1,14 @@
 package ctcalgo
 
-type Segment struct {
+type segment struct {
 	Label string
 	Start int64
 	End   int64
 }
 
 type Token struct {
-	Text  string
-	Start int64
-	End   int64
-	Score float32
+	Text    string
+	StartMs int64
+	EndMs   int64
+	Score   float32
 }

@@ -51,7 +51,7 @@ func addStarTokenDim(logProbs [][]float32) [][]float32 {
 	return out
 }
 
-func ForcedAlignmentFromEmissions(emissions [][]float32, text string, languageIso string, offsetSamples int64) ([]Token, error) {
+func ForcedAlignmentFromEmissions(emissions [][]float32, text string, languageIso string) ([]Token, error) {
 
 	logProbs := addStarTokenDim(logSoftmax(emissions))
 
@@ -67,7 +67,7 @@ func ForcedAlignmentFromEmissions(emissions [][]float32, text string, languageIs
 		return nil, err
 	}
 
-	alignedTokens := postprocessSegments(textStarred, spans, scores, offsetSamples)
+	alignedTokens := postprocessSegments(textStarred, spans, scores)
 	return alignedTokens, nil
 }
 
@@ -76,10 +76,10 @@ func generateEmissions(audio []float32) ([][]float32, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func ForcedAlignmentFromAudio(audio []float32, text string, languageIso string, offsetSamples int64) ([]Token, error) {
+func ForcedAlignmentFromAudio(audio []float32, text string, languageIso string) ([]Token, error) {
 	emssions, err := generateEmissions(audio)
 	if err != nil {
 		return nil, err
 	}
-	return ForcedAlignmentFromEmissions(emssions, text, languageIso, offsetSamples)
+	return ForcedAlignmentFromEmissions(emssions, text, languageIso)
 }

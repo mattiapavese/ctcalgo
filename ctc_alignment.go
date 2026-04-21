@@ -197,7 +197,7 @@ func ctcAlignment(logProbs [][]float32, targets []int64, blank int64) ([]int64, 
 	return path, scores, nil
 }
 
-func getAlignments(logProbs [][]float32, tokensStarred []string) (segments []Segment, scores []float32, err error) {
+func getAlignments(logProbs [][]float32, tokensStarred []string) (segments []segment, scores []float32, err error) {
 	tokenIndices := make([]int64, 0)
 	for _, token := range tokensStarred {
 		for word := range strings.SplitSeq(token, " ") {

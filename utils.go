@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-func mergeRepeats(path []int64) (segments []Segment) {
+func mergeRepeats(path []int64) (segments []segment) {
 	i1, i2 := int64(0), int64(0)
 	for i1 < int64(len(path)) {
 		for i2 < int64(len(path)) && path[i1] == path[i2] {
 			i2++
 		}
-		segments = append(segments, Segment{
+		segments = append(segments, segment{
 			Label: idx2TkMap[path[i1]],
 			Start: i1,
 			End:   i2 - 1,
@@ -63,7 +63,7 @@ func splitText(s string) []string {
 	return strings.Fields(s)
 }
 
-func getSpans(tokens []string, segments []Segment) ([][]Segment, error) {
+func getSpans(tokens []string, segments []segment) ([][]segment, error) {
 	ltrIdx := 0
 	tokensIdx := 0
 
@@ -116,12 +116,12 @@ func getSpans(tokens []string, segments []Segment) ([][]Segment, error) {
 		}
 	}
 
-	var spans [][]Segment
+	var spans [][]segment
 
 	for idx, iv := range intervals {
 		start, end = iv.start, iv.end
 
-		span := make([]Segment, end-start+1)
+		span := make([]segment, end-start+1)
 		copy(span, segments[start:end+1])
 
 		// left padding
@@ -135,12 +135,12 @@ func getSpans(tokens []string, segments []Segment) ([][]Segment, error) {
 					padStart = (prevSeg.Start + prevSeg.End) / 2
 				}
 
-				pad := Segment{
+				pad := segment{
 					Label: BLANK_TOKEN,
 					Start: padStart,
 					End:   span[0].Start,
 				}
-				span = append([]Segment{pad}, span...)
+				span = append([]segment{pad}, span...)
 			}
 		}
 
@@ -155,7 +155,7 @@ func getSpans(tokens []string, segments []Segment) ([][]Segment, error) {
 					padEnd = int64(math.Floor(float64(nextSeg.Start+nextSeg.End) / 2))
 				}
 
-				pad := Segment{
+				pad := segment{
 					Label: BLANK_TOKEN,
 					Start: span[len(span)-1].End,
 					End:   padEnd,
@@ -188,9 +188,8 @@ func preprocessText(text string, romanize bool) ([]string, []string) {
 
 func postprocessSegments(
 	textStarred []string,
-	spans [][]Segment,
+	spans [][]segment,
 	scores []float32,
-	offsetSamples int64,
 ) []Token {
 
 	tokens := []Token{}
@@ -209,8 +208,11 @@ func postprocessSegments(
 		segStartIdx := span[0].Start
 		segEndIdx := span[len(span)-1].End
 
-		audioStartSamples := segStartIdx * TOTAL_STRIDE
-		audioEndSamples := (segEndIdx + 1) * TOTAL_STRIDE
+		// notice that 20ms corresponds to the amount of audio processed
+		// in a stride of 320 samples:
+		// (320/SR)*1000 = 20ms, with SR = 16000
+		audioStartMs := segStartIdx * 20
+		audioEndMs := (segEndIdx + 1) * 20
 
 		// check if all labels are <star> or <blank>
 		allSpecial := true
@@ -236,10 +238,10 @@ func postprocessSegments(
 		}
 
 		sample := Token{
-			Start: audioStartSamples + offsetSamples,
-			End:   audioEndSamples + offsetSamples,
-			Text:  t,
-			Score: float32(math.Exp(score)),
+			StartMs: audioStartMs,
+			EndMs:   audioEndMs,
+			Text:    t,
+			Score:   float32(math.Exp(score)),
 		}
 
 		tokens = append(tokens, sample)
@@ -247,9 +249,9 @@ func postprocessSegments(
 
 	// fix overlaps
 	for i := 0; i < len(tokens)-1; i++ {
-		gap := tokens[i+1].Start - tokens[i].End
+		gap := tokens[i+1].StartMs - tokens[i].EndMs
 		if gap < 0 {
-			tokens[i+1].Start = tokens[i].End
+			tokens[i+1].StartMs = tokens[i].EndMs
 		}
 	}
 
