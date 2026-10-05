@@ -25,6 +25,9 @@ func ctcAlignment(logProbs [][]float32, targets []int64, blank int64) ([]int64, 
 		return nil, nil, fmt.Errorf("logProbs must not be empty")
 	}
 	L := len(targets)
+	if L == 0 {
+		return nil, nil, fmt.Errorf("targets must not be empty")
+	}
 
 	// S is the length of the extended label sequence:
 	// blank, t[0], blank, t[1], blank, ..., t[L-1], blank
@@ -42,45 +45,10 @@ func ctcAlignment(logProbs [][]float32, targets []int64, blank int64) ([]int64, 
 		return nil, nil, fmt.Errorf("targets length is too long for CTC: T=%d, need at least %d", T, L+R)
 	}
 
-	// alphas[2*S]: two rolling rows (current and previous time step).
-	alphas := make([]float32, 2*S)
-	for i := range alphas {
-		alphas[i] = negInf
-	}
-
-	// Back-pointer storage, compactly encoded as two bit-vectors.
-	// We only need T-1 back-pointer rows (no back-pointer at t=0).
-	backPtrOffset := make([]uint64, T-1) // starting position in the sequence at each t
-	backPtrSeek := make([]uint64, T-1)   // byte offset into the bit vectors at each t
-
-	// Bit 0 of the back-pointer pair: came from i-1
-	// Bit 1 of the back-pointer pair: came from i-2
-	// Both false: came from i (stayed)
-	capacity := (S+1)*(T-L) + 1
-	backPtrBit0 := make([]bool, capacity)
-	backPtrBit1 := make([]bool, capacity)
-
-	// Initialise t=0
-	start := 0
-	if T-0 <= L+R { // i.e. T <= L+R, but we checked above so this is always false at t=0
-		start = 1
-	}
-	end := 1
-	if S > 1 {
-		end = 2
-	}
-	for i := start; i < end; i++ {
-		var labelIdx int64
-		if i%2 == 0 {
-			labelIdx = blank
-		} else {
-			labelIdx = targets[i/2]
-		}
-		alphas[i] = logProbs[0][labelIdx]
-	}
-
-	var seek uint64
-	for t := 1; t < T; t++ {
+	// Only positions [start, end) of the extended sequence are reachable at
+	// time step t: end grows over the first L+R steps and start over the
+	// last L+R, by two where the blank between distinct labels is skipped.
+	advance := func(t, start, end int) (int, int) {
 		// Advance the start pointer when there aren't enough remaining frames
 		if T-t <= L+R {
 			if start%2 == 1 {
@@ -100,6 +68,59 @@ func ctcAlignment(logProbs [][]float32, targets []int64, blank int64) ([]int64, 
 			}
 			end++
 		}
+		return start, end
+	}
+
+	// At t=0 only the leading blank and the first label are reachable, the
+	// blank only if there is a frame to spare for it.
+	start := 0
+	if T <= L+R {
+		start = 1
+	}
+	end := 1
+	if S > 1 {
+		end = 2
+	}
+
+	// alphas[2*S]: two rolling rows (current and previous time step).
+	alphas := make([]float32, 2*S)
+	for i := range alphas {
+		alphas[i] = negInf
+	}
+
+	// Back-pointer storage, compactly encoded as two bit-vectors.
+	// We only need T-1 back-pointer rows (no back-pointer at t=0).
+	backPtrOffset := make([]uint64, T-1) // starting position in the sequence at each t
+	backPtrSeek := make([]uint64, T-1)   // byte offset into the bit vectors at each t
+
+	// Bit 0 of the back-pointer pair: came from i-1
+	// Bit 1 of the back-pointer pair: came from i-2
+	// Both false: came from i (stayed)
+	// One pair is stored per reachable position at each t >= 1: replay the
+	// band to size the bit vectors exactly. Estimating it as (S+1)*(T-L)
+	// falls short once T drops below ~2L, i.e. under 2 frames per target.
+	capacity := 0
+	for t, s, e := 1, start, end; t < T; t++ {
+		s, e = advance(t, s, e)
+		capacity += e - s
+	}
+	backPtrBit0 := make([]bool, capacity)
+	backPtrBit1 := make([]bool, capacity)
+
+	// Initialise t=0
+	for i := start; i < end; i++ {
+		var labelIdx int64
+		if i%2 == 0 {
+			labelIdx = blank
+		} else {
+			labelIdx = targets[i/2]
+		}
+		alphas[i] = logProbs[0][labelIdx]
+	}
+
+	var seek uint64
+	for t := 1; t < T; t++ {
+		start, end = advance(t, start, end)
 
 		startloop := start
 		curOff := t % 2
